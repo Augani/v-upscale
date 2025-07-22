@@ -1,0 +1,224 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+      upload_url: ${{ steps.release.outputs.upload_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: tag_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --reverse)
+          fi
+
+          # Create changelog
+          cat << EOF > RELEASE_NOTES.md
+          ## What's Changed
+
+          $COMMITS
+
+          ## Downloads
+
+          Choose the appropriate file for your platform:
+
+          - **macOS (Apple Silicon)**: \`v-upscale_*_aarch64.dmg\`
+          - **macOS (Intel)**: \`v-upscale_*_x64.dmg\`
+          - **Windows**: \`v-upscale_*.msi\`
+          - **Linux**: \`v-upscale_*.deb\` or \`v-upscale_*.AppImage\`
+
+          ## Installation & Usage
+
+          1. Download and install the appropriate package for your system
+          2. Launch V-Upscale
+          3. Click "Test MoltenVK" to verify GPU acceleration is working
+          4. Select an image and choose your upscaling factor (2x, 4x, or 8x)
+          5. Click "Upscale Image" and wait for processing
+          6. Download your enhanced image!
+
+                     ## System Requirements
+           
+           **No additional software installation required!**
+           
+           - **macOS**: 10.15+ with any Metal-capable GPU
+           - **Windows**: Windows 10+ with any DirectX 11+ GPU
+           - **Linux**: Any recent distribution with basic GPU drivers
+           
+           All Vulkan libraries and dependencies are bundled internally.
+
+          ## Need Help?
+
+          - 📖 [Documentation](https://github.com/${{ github.repository }}#readme)
+          - 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)
+          - 💬 [Discussions](https://github.com/${{ github.repository }}/discussions)
+          EOF
+
+      - name: Create Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: V-Upscale ${{ steps.tag_version.outputs.VERSION }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: ${{ contains(steps.tag_version.outputs.VERSION, 'alpha') || contains(steps.tag_version.outputs.VERSION, 'beta') || contains(steps.tag_version.outputs.VERSION, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-release:
+    name: Build Release (${{ matrix.target }})
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-arm64
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x64
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: windows-x64
+
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Vulkan SDK (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install vulkan-headers vulkan-loader vulkan-tools
+          # Ensure MoltenVK libraries are available
+          mkdir -p src-tauri/moltenvk
+          cp /opt/homebrew/lib/libMoltenVK.dylib src-tauri/moltenvk/ 2>/dev/null || echo "Using bundled MoltenVK"
+          cp /opt/homebrew/lib/libvulkan.dylib src-tauri/moltenvk/ 2>/dev/null || echo "Using bundled Vulkan loader"
+
+      - name: Install Vulkan SDK (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
+        run: |
+          $VulkanSDK = "C:\VulkanSDK\1.3.290.0"
+          $installer = "VulkanSDK-1.3.290.0-Installer.exe"
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.290.0/windows/$installer" -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/S" -Wait
+          echo "VULKAN_SDK=$VulkanSDK" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install Vulkan SDK (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-focal.list https://packages.lunarg.com/vulkan/lunarg-vulkan-focal.list
+          sudo apt update
+          sudo apt install -y vulkan-sdk libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target ${{ matrix.target }}
+
+  post-release:
+    name: Post Release Tasks
+    needs: [create-release, build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get release info
+        id: release_info
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "RELEASE_URL=https://github.com/${{ github.repository }}/releases/tag/${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update latest release info
+        run: |
+          echo "Latest release: ${{ steps.release_info.outputs.VERSION }}" > LATEST_RELEASE.txt
+          echo "Release URL: ${{ steps.release_info.outputs.RELEASE_URL }}" >> LATEST_RELEASE.txt
+
+      - name: Send Discord notification
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: sarisia/actions-status-discord@v1
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        with:
+          webhook: ${{ env.DISCORD_WEBHOOK }}
+          title: "🎉 V-Upscale ${{ steps.release_info.outputs.VERSION }} Released!"
+          description: |
+            New version of V-Upscale is now available with cross-platform builds!
+
+            **🚀 Download:** [${{ steps.release_info.outputs.VERSION }}](${{ steps.release_info.outputs.RELEASE_URL }})
+
+            **✨ Features:**
+            - Professional-grade image upscaling with Vulkan GPU acceleration
+            - Mitchell-Netravali + Lanczos interpolation algorithms
+            - Advanced post-processing (sharpening, contrast, noise reduction)
+            - Self-contained bundles for all platforms
+          color: 0x00d4aa
+
+      - name: Update homebrew formula (macOS)
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta')
+        run: |
+          echo "TODO: Update Homebrew formula for stable releases"
+          # Future: Automate homebrew formula updates

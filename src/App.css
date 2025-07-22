@@ -326,3 +326,31 @@ button.secondary:hover:not(:disabled) {
     justify-content: center;
   }
 }
+
+.moltenvk-test {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.test-button {
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.test-button:hover {
+  background-color: #138496;
+}
+
+.status-message {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+}

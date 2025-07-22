@@ -1,0 +1,249 @@
+name: Build V-Upscale
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Vulkan SDK
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-focal.list https://packages.lunarg.com/vulkan/lunarg-vulkan-focal.list
+          sudo apt update
+          sudo apt install -y vulkan-sdk
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+        working-directory: src-tauri
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: src-tauri
+
+      - name: Run tests
+        run: cargo test --verbose
+        working-directory: src-tauri
+
+  build:
+    name: Build for ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bundle: app
+
+          - platform: "macos-intel"
+            os: macos-latest
+            target: x86_64-apple-darwin
+            bundle: app
+
+          - platform: "windows-latest"
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundle: msi
+
+          - platform: "ubuntu-latest"
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundle: deb
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Platform-specific setups
+      - name: Install Vulkan SDK (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install vulkan-headers vulkan-loader vulkan-tools
+          echo "VULKAN_SDK=/opt/homebrew" >> $GITHUB_ENV
+          echo "VK_ICD_FILENAMES=/opt/homebrew/share/vulkan/icd.d/MoltenVK_icd.json" >> $GITHUB_ENV
+
+      - name: Install Vulkan SDK (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $VulkanSDK = "C:\VulkanSDK\1.3.290.0"
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.290.0/windows/VulkanSDK-1.3.290.0-Installer.exe" -OutFile VulkanSDK.exe
+          Start-Process -FilePath VulkanSDK.exe -ArgumentList "/S" -Wait
+          echo "VULKAN_SDK=$VulkanSDK" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install Vulkan SDK (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-focal.list https://packages.lunarg.com/vulkan/lunarg-vulkan-focal.list
+          sudo apt update
+          sudo apt install -y vulkan-sdk libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Copy MoltenVK for macOS builds
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p src-tauri/moltenvk
+          cp /opt/homebrew/lib/libMoltenVK.dylib src-tauri/moltenvk/ || echo "MoltenVK not found, using bundled version"
+          cp /opt/homebrew/lib/libvulkan.dylib src-tauri/moltenvk/ || echo "Vulkan loader not found, using bundled version"
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "V-Upscale v__VERSION__"
+          releaseBody: "See the assets to download this version and install."
+          releaseDraft: true
+          prerelease: false
+          args: --target ${{ matrix.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: v-upscale-${{ matrix.platform }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/v-upscale*
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*
+          name: V-Upscale ${{ github.ref_name }}
+          body: |
+            ## V-Upscale ${{ github.ref_name }}
+
+            Professional-grade AI image upscaler powered by Vulkan compute shaders.
+
+            ### 🚀 Downloads
+
+            - **macOS (Apple Silicon)**: `v-upscale_*_aarch64.dmg`
+            - **macOS (Intel)**: `v-upscale_*_x64.dmg`  
+            - **Windows**: `v-upscale_*.msi`
+            - **Linux**: `v-upscale_*.deb` or `v-upscale_*.AppImage`
+
+            ### ✨ Features
+
+            - Mitchell-Netravali bicubic interpolation for sharp upscaling
+            - Lanczos-2 filter for maximum quality at high factors
+            - GPU acceleration with Vulkan compute shaders
+            - Advanced post-processing (sharpening, contrast, noise reduction)
+            - Self-contained bundle with MoltenVK for macOS
+
+            ### 🛠️ Installation
+
+            1. Download the appropriate file for your platform
+            2. Install/run the application
+            3. Test MoltenVK setup using the "Test MoltenVK" button
+            4. Start upscaling your images!
+
+            ### 📊 System Requirements
+
+            - **macOS**: 10.15+ with Metal-capable GPU
+            - **Windows**: Windows 10+ with Vulkan-compatible GPU
+            - **Linux**: Recent distribution with Vulkan drivers
+
+            For issues or questions, please visit our [GitHub Issues](https://github.com/${{ github.repository }}/issues).
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify on Discord
+    runs-on: ubuntu-latest
+    needs: [build, release]
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.DISCORD_WEBHOOK
+    steps:
+      - name: Send Discord notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "V-Upscale ${{ github.ref_name }} Released! 🎉"
+          description: |
+            New version of V-Upscale has been released with cross-platform builds!
+
+            **Download:** [GitHub Releases](https://github.com/${{ github.repository }}/releases/latest)
+          color: 0x00ff00

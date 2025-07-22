@@ -16,6 +16,7 @@ function App() {
   const [upscaleFactor, setUpscaleFactor] = useState(2);
   const [isUpscaling, setIsUpscaling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [moltenVkStatus, setMoltenVkStatus] = useState<string | null>(null);
 
   const handleSelectImage = useCallback(async () => {
     try {
@@ -107,11 +108,28 @@ function App() {
     setError(null);
   };
 
+  const testMoltenVk = async () => {
+    try {
+      setMoltenVkStatus("Testing MoltenVK...");
+      const result = await invoke<string>("test_moltenvk_setup");
+      setMoltenVkStatus(`✅ ${result}`);
+    } catch (err) {
+      console.error(err);
+      setMoltenVkStatus(`❌ MoltenVK test failed: ${err}`);
+    }
+  };
+
   return (
     <div className="app-container">
       <header className="app-header">
         <h1>V-Upscale</h1>
         <p>Cross-platform AI Image Upscaler powered by Vulkan</p>
+        <div className="moltenvk-test">
+          <button onClick={testMoltenVk} className="test-button">
+            Test MoltenVK
+          </button>
+          {moltenVkStatus && <p className="status-message">{moltenVkStatus}</p>}
+        </div>
       </header>
 
       <main className="app-main">

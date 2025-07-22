@@ -1,7 +1,25 @@
 {
   "name": "v-upscale",
-  "private": true,
+  "private": false,
   "version": "0.1.0",
+  "description": "Professional-grade AI image upscaler powered by Vulkan compute shaders",
+  "keywords": [
+    "image",
+    "upscale",
+    "vulkan",
+    "gpu",
+    "tauri",
+    "rust",
+    "ai",
+    "enhancement"
+  ],
+  "homepage": "https://github.com/augani/v-upscale#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/augani/v-upscale.git"
+  },
+  "license": "MIT",
+  "author": "V-Upscale Contributors",
   "type": "module",
   "scripts": {
     "dev": "vite",

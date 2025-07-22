@@ -16,8 +16,63 @@ pub struct VulkanContext {
 }
 
 impl VulkanContext {
+    fn try_load_bundled_vulkan() -> Result<ash::Entry, Box<dyn std::error::Error>> {
+        use std::env;
+
+        let exe_path = env::current_exe()?;
+        let app_dir = exe_path.parent().ok_or("Could not find app directory")?;
+
+        // Search for bundled Vulkan loader
+        let possible_paths = [
+            app_dir.join("../Resources/libvulkan.dylib"),
+            app_dir.join("Resources/libvulkan.dylib"),
+            app_dir
+                .parent()
+                .unwrap_or(app_dir)
+                .join("Resources/libvulkan.dylib"),
+            app_dir
+                .parent()
+                .unwrap_or(app_dir)
+                .parent()
+                .unwrap_or(app_dir)
+                .join("Resources/libvulkan.dylib"),
+            // Development paths
+            app_dir.join("../../../src-tauri/moltenvk/libvulkan.dylib"),
+            app_dir.join("../../src-tauri/moltenvk/libvulkan.dylib"),
+            app_dir.join("../src-tauri/moltenvk/libvulkan.dylib"),
+            app_dir.join("moltenvk/libvulkan.dylib"),
+        ];
+
+        for vulkan_path in &possible_paths {
+            if vulkan_path.exists() {
+                println!("🔍 Found bundled Vulkan loader at: {:?}", vulkan_path);
+                let vulkan_path_absolute = vulkan_path.canonicalize()?;
+
+                // Try to load the entry with the specific library path
+                match unsafe { ash::Entry::load_from(&vulkan_path_absolute) } {
+                    Ok(entry) => {
+                        println!("✅ Successfully loaded bundled Vulkan loader");
+                        return Ok(entry);
+                    }
+                    Err(e) => {
+                        println!("❌ Failed to load bundled Vulkan loader: {}", e);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        Err("No bundled Vulkan loader found".into())
+    }
+
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let entry = unsafe { ash::Entry::load()? };
+        // Try to find bundled Vulkan loader first
+        let entry = if let Ok(bundled_entry) = Self::try_load_bundled_vulkan() {
+            bundled_entry
+        } else {
+            println!("Falling back to system Vulkan loader...");
+            unsafe { ash::Entry::load()? }
+        };
         let instance = Self::create_instance(&entry)?;
         let (physical_device, queue_family_index) = Self::pick_physical_device(&instance)?;
         let device = Self::create_logical_device(&instance, physical_device, queue_family_index)?;

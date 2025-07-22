@@ -22,16 +22,10 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔍 Debug: Executable path: {:?}", exe_path);
     println!("🔍 Debug: App directory: {:?}", app_dir);
 
-    // More comprehensive search for MoltenVK files
+    // Enhanced search for MoltenVK files (prioritizing bundled resources)
     let possible_resource_paths = [
-        // Tauri development mode
-        app_dir.join("../../../src-tauri/moltenvk"),
-        app_dir.join("../../src-tauri/moltenvk"),
-        app_dir.join("../src-tauri/moltenvk"),
-        app_dir.join("src-tauri/moltenvk"),
-        app_dir.join("moltenvk"),
-        // Tauri bundle mode
-        app_dir.join("../Resources"),
+        // Tauri bundle mode (production) - highest priority
+        app_dir.join("../Resources"), // Most common bundle location
         app_dir.join("Resources"),
         app_dir.parent().unwrap_or(app_dir).join("Resources"),
         app_dir
@@ -40,6 +34,15 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
             .parent()
             .unwrap_or(app_dir)
             .join("Resources"),
+        // macOS app bundle structure
+        app_dir.join("../../Resources"),
+        app_dir.join("../../../Resources"),
+        // Tauri development mode
+        app_dir.join("../../../src-tauri/moltenvk"),
+        app_dir.join("../../src-tauri/moltenvk"),
+        app_dir.join("../src-tauri/moltenvk"),
+        app_dir.join("src-tauri/moltenvk"),
+        app_dir.join("moltenvk"),
         // Current working directory (development mode)
         env::current_dir()
             .unwrap_or_else(|_| app_dir.to_path_buf())
@@ -47,8 +50,6 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
         env::current_dir()
             .unwrap_or_else(|_| app_dir.to_path_buf())
             .join("moltenvk"),
-        // Absolute fallback for the current project
-        std::path::PathBuf::from("/Users/augustusotu/Projects/v-upscale/src-tauri/moltenvk"),
     ];
 
     println!(
@@ -75,6 +76,7 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
 
     let moltenvk_dir = moltenvk_dir.ok_or_else(|| {
         println!("❌ Could not find libMoltenVK.dylib in any of the searched locations");
+        println!("💡 Make sure MoltenVK files are properly bundled with the app");
         "Could not find MoltenVK resources"
     })?;
 
@@ -96,7 +98,6 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
     // Check library file properties
     let metadata = fs::metadata(&moltenvk_dylib_absolute)?;
     println!("📊 Library file size: {} bytes", metadata.len());
-    println!("📊 Library file permissions: {:?}", metadata.permissions());
 
     // Create a proper ICD file with absolute paths
     let icd_content = format!(
@@ -115,20 +116,21 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
     icd_file.write_all(icd_content.as_bytes())?;
     icd_file.sync_all()?;
 
-    // Verify the ICD file was created correctly
-    let created_content = fs::read_to_string(&temp_icd_path)?;
-    println!("📄 Generated ICD file content:\n{}", created_content);
+    // Check if Vulkan loader is bundled (will be loaded directly by VulkanContext)
+    let vulkan_loader = moltenvk_dir.join("libvulkan.dylib");
+    if vulkan_loader.exists() {
+        println!("🔧 Vulkan loader found in bundle: {:?}", vulkan_loader);
+    } else {
+        println!("⚠️  Vulkan loader not found in bundle, will use system library");
+    }
 
     // Set environment variables
     env::set_var("VK_ICD_FILENAMES", &temp_icd_path);
     env::set_var("VK_DRIVER_FILES", &temp_icd_path);
-    // Enable Vulkan loader debug output
-    env::set_var("VK_LOADER_DEBUG", "all");
 
-    println!("🔧 MoltenVK configured:");
-    println!("   Library: {:?}", moltenvk_dylib_absolute);
-    println!("   ICD: {:?}", temp_icd_path);
-    println!("   VK_ICD_FILENAMES = {:?}", env::var("VK_ICD_FILENAMES"));
+    println!("🔧 MoltenVK configured successfully:");
+    println!("   MoltenVK Library: {:?}", moltenvk_dylib_absolute);
+    println!("   ICD File: {:?}", temp_icd_path);
 
     Ok(())
 }
@@ -360,6 +362,43 @@ fn upscale_image(path: String, factor: u32) -> Result<String, String> {
     Ok(output_path)
 }
 
+#[tauri::command]
+fn test_moltenvk_setup() -> Result<String, String> {
+    println!("🧪 Testing MoltenVK setup...");
+
+    #[cfg(target_os = "macos")]
+    {
+        match setup_moltenvk_for_command() {
+            Ok(()) => {
+                println!("✅ MoltenVK setup successful");
+
+                // Try to initialize Vulkan context to verify everything works
+                match VulkanContext::new() {
+                    Ok(_context) => {
+                        println!("✅ Vulkan context creation successful");
+                        Ok("MoltenVK setup and Vulkan initialization successful".to_string())
+                    }
+                    Err(e) => {
+                        let error_msg = format!("❌ Vulkan context creation failed: {}", e);
+                        println!("{}", error_msg);
+                        Err(error_msg)
+                    }
+                }
+            }
+            Err(e) => {
+                let error_msg = format!("❌ MoltenVK setup failed: {}", e);
+                println!("{}", error_msg);
+                Err(error_msg)
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok("MoltenVK test skipped (not on macOS)".to_string())
+    }
+}
+
 pub fn run() {
     Builder::default()
         .setup(|_app| {
@@ -375,7 +414,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             upscale_image,
             upscale_image_enhanced,
-            upscale_image_nearest_neighbor
+            upscale_image_nearest_neighbor,
+            test_moltenvk_setup
         ])
         .run(generate_context!())
         .expect("error while running tauri application");
