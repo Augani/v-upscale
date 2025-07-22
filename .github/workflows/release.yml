@@ -172,7 +172,7 @@ jobs:
       - name: Build release
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.TOKEN_SECRET }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         with:
@@ -197,26 +197,6 @@ jobs:
         run: |
           echo "Latest release: ${{ steps.release_info.outputs.VERSION }}" > LATEST_RELEASE.txt
           echo "Release URL: ${{ steps.release_info.outputs.RELEASE_URL }}" >> LATEST_RELEASE.txt
-
-      - name: Send Discord notification
-        if: ${{ env.DISCORD_WEBHOOK != '' }}
-        uses: sarisia/actions-status-discord@v1
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-        with:
-          webhook: ${{ env.DISCORD_WEBHOOK }}
-          title: "🎉 V-Upscale ${{ steps.release_info.outputs.VERSION }} Released!"
-          description: |
-            New version of V-Upscale is now available with cross-platform builds!
-
-            **🚀 Download:** [${{ steps.release_info.outputs.VERSION }}](${{ steps.release_info.outputs.RELEASE_URL }})
-
-            **✨ Features:**
-            - Professional-grade image upscaling with Vulkan GPU acceleration
-            - Mitchell-Netravali + Lanczos interpolation algorithms
-            - Advanced post-processing (sharpening, contrast, noise reduction)
-            - Self-contained bundles for all platforms
-          color: 0x00d4aa
 
       - name: Update homebrew formula (macOS)
         if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta')
