@@ -1,4 +1,5 @@
 use ash::vk;
+use image::{ImageBuffer, Rgba};
 use std::ffi::CString;
 
 pub struct VulkanContext {
@@ -549,6 +550,231 @@ fn create_buffer(
     }
 
     Ok((buffer, memory))
+}
+
+/// Post-processing functions for enhanced image quality
+pub mod post_processing {
+    use super::*;
+
+    /// Apply sharpening filter to enhance details
+    pub fn apply_sharpening(
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        intensity: f32,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width, height, image_data.to_vec())
+                .ok_or("Failed to create image buffer")?;
+
+        // Simple unsharp masking implementation
+        let result = ImageBuffer::from_fn(width, height, |x, y| {
+            let pixel = img.get_pixel(x, y);
+
+            // Get neighborhood pixels for edge detection
+            let get_safe_pixel = |px: i32, py: i32| -> Rgba<u8> {
+                let px = px.clamp(0, width as i32 - 1) as u32;
+                let py = py.clamp(0, height as i32 - 1) as u32;
+                *img.get_pixel(px, py)
+            };
+
+            // High-pass sharpening kernel (more aggressive)
+            let kernel = [
+                [-0.25, -0.5, -0.25],
+                [-0.5, 4.0 + intensity * 2.0, -0.5],
+                [-0.25, -0.5, -0.25],
+            ];
+
+            let mut r_sum = 0.0;
+            let mut g_sum = 0.0;
+            let mut b_sum = 0.0;
+
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let neighbor = get_safe_pixel(x as i32 + dx, y as i32 + dy);
+                    let weight = kernel[(dy + 1) as usize][(dx + 1) as usize];
+                    r_sum += neighbor[0] as f32 * weight;
+                    g_sum += neighbor[1] as f32 * weight;
+                    b_sum += neighbor[2] as f32 * weight;
+                }
+            }
+
+            Rgba([
+                (r_sum.clamp(0.0, 255.0)) as u8,
+                (g_sum.clamp(0.0, 255.0)) as u8,
+                (b_sum.clamp(0.0, 255.0)) as u8,
+                pixel[3], // Preserve alpha
+            ])
+        });
+
+        Ok(result.into_raw())
+    }
+
+    /// Enhance contrast and brightness for old/faded images
+    pub fn enhance_contrast(
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width, height, image_data.to_vec())
+                .ok_or("Failed to create image buffer")?;
+
+        // Convert to grayscale for histogram analysis, but keep RGB data
+        let enhanced_img = ImageBuffer::from_fn(width, height, |x, y| {
+            let pixel = img.get_pixel(x, y);
+
+            // Enhanced contrast and clarity boost
+            let gamma = 1.15; // Slightly brighten
+            let contrast = 1.25; // More aggressive contrast boost
+            let saturation = 1.1; // Slight saturation increase
+
+            // Apply gamma correction first
+            let r_gamma = (pixel[0] as f32 / 255.0).powf(1.0 / gamma);
+            let g_gamma = (pixel[1] as f32 / 255.0).powf(1.0 / gamma);
+            let b_gamma = (pixel[2] as f32 / 255.0).powf(1.0 / gamma);
+
+            // Apply contrast enhancement
+            let r_contrast = (r_gamma - 0.5) * contrast + 0.5;
+            let g_contrast = (g_gamma - 0.5) * contrast + 0.5;
+            let b_contrast = (b_gamma - 0.5) * contrast + 0.5;
+
+            // Apply saturation boost
+            let luminance = 0.299 * r_contrast + 0.587 * g_contrast + 0.114 * b_contrast;
+            let r = ((r_contrast - luminance) * saturation + luminance).clamp(0.0, 1.0) * 255.0;
+            let g = ((g_contrast - luminance) * saturation + luminance).clamp(0.0, 1.0) * 255.0;
+            let b = ((b_contrast - luminance) * saturation + luminance).clamp(0.0, 1.0) * 255.0;
+
+            Rgba([r as u8, g as u8, b as u8, pixel[3]])
+        });
+
+        Ok(enhanced_img.into_raw())
+    }
+
+    /// Apply noise reduction using a simple bilateral-like filter
+    pub fn reduce_noise(
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        strength: f32,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        if strength <= 0.0 {
+            return Ok(image_data.to_vec());
+        }
+
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_raw(width, height, image_data.to_vec())
+                .ok_or("Failed to create image buffer")?;
+
+        // Simple noise reduction using mean filtering
+        let result = ImageBuffer::from_fn(width, height, |x, y| {
+            let pixel = img.get_pixel(x, y);
+
+            // Apply simple box filter for noise reduction
+            let radius = (strength * 2.0) as i32;
+            let mut r_sum = 0u32;
+            let mut g_sum = 0u32;
+            let mut b_sum = 0u32;
+            let mut count = 0u32;
+
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    let px = (x as i32 + dx).clamp(0, width as i32 - 1) as u32;
+                    let py = (y as i32 + dy).clamp(0, height as i32 - 1) as u32;
+                    let neighbor = img.get_pixel(px, py);
+
+                    r_sum += neighbor[0] as u32;
+                    g_sum += neighbor[1] as u32;
+                    b_sum += neighbor[2] as u32;
+                    count += 1;
+                }
+            }
+
+            // Simple edge preservation: blend based on variance
+            let avg_r = r_sum / count;
+            let avg_g = g_sum / count;
+            let avg_b = b_sum / count;
+
+            let edge_factor = ((pixel[0] as i32 - avg_r as i32).abs()
+                + (pixel[1] as i32 - avg_g as i32).abs()
+                + (pixel[2] as i32 - avg_b as i32).abs()) as f32
+                / 3.0;
+
+            let blend = (1.0 - (edge_factor / 100.0).min(1.0)) * strength * 0.5;
+
+            Rgba([
+                ((pixel[0] as f32 * (1.0 - blend) + avg_r as f32 * blend).clamp(0.0, 255.0)) as u8,
+                ((pixel[1] as f32 * (1.0 - blend) + avg_g as f32 * blend).clamp(0.0, 255.0)) as u8,
+                ((pixel[2] as f32 * (1.0 - blend) + avg_b as f32 * blend).clamp(0.0, 255.0)) as u8,
+                pixel[3], // Preserve alpha
+            ])
+        });
+
+        Ok(result.into_raw())
+    }
+}
+
+/// Enhanced image processing with post-processing options
+pub fn process_image_enhanced(
+    context: &VulkanContext,
+    input_image_path: &str,
+    output_image_path: &str,
+    factor: u32,
+    apply_sharpening: bool,
+    apply_contrast_enhancement: bool,
+    apply_noise_reduction: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!(
+        "Enhanced processing {} -> {}",
+        input_image_path, output_image_path
+    );
+
+    // First, do the Vulkan upscaling
+    let temp_output = format!("{}.temp", output_image_path);
+    process_image(context, input_image_path, &temp_output, factor)?;
+
+    // Load the upscaled image for post-processing
+    let upscaled_image = image::open(&temp_output)?.to_rgba8();
+    let (width, height) = upscaled_image.dimensions();
+    let mut image_data = upscaled_image.into_raw();
+
+    println!("Applying post-processing filters...");
+
+    // Apply noise reduction first (if enabled)
+    if apply_noise_reduction {
+        println!("  - Reducing noise...");
+        image_data = post_processing::reduce_noise(&image_data, width, height, 0.5)?;
+    }
+
+    // Apply contrast enhancement
+    if apply_contrast_enhancement {
+        println!("  - Enhancing contrast...");
+        image_data = post_processing::enhance_contrast(&image_data, width, height)?;
+    }
+
+    // Apply sharpening last (more aggressive to counter any remaining blur)
+    if apply_sharpening {
+        println!("  - Applying sharpening...");
+        image_data = post_processing::apply_sharpening(&image_data, width, height, 1.8)?;
+    }
+
+    // Save the final processed image
+    image::save_buffer(
+        output_image_path,
+        &image_data,
+        width,
+        height,
+        image::ColorType::Rgba8,
+    )
+    .map_err(|e| format!("Failed to save final image: {}", e))?;
+
+    // Clean up temp file
+    if std::path::Path::new(&temp_output).exists() {
+        std::fs::remove_file(&temp_output)?;
+    }
+
+    println!("✓ Enhanced processing complete: {}", output_image_path);
+    Ok(())
 }
 
 impl Drop for VulkanContext {

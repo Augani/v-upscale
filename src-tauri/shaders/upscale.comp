@@ -16,6 +16,108 @@ layout(binding = 1) writeonly buffer Output {
     uint output_image[];
 };
 
+// Improved bicubic weight function (sharper Catmull-Rom)
+float cubic_weight(float x) {
+    x = abs(x);
+    if (x < 1.0) {
+        return 1.0 - 2.0 * x * x + x * x * x;
+    } else if (x < 2.0) {
+        return 4.0 - 8.0 * x + 5.0 * x * x - x * x * x;
+    }
+    return 0.0;
+}
+
+// Mitchell-Netravali filter (B=1/3, C=1/3) - sharper than Catmull-Rom
+float mitchell_weight(float x) {
+    x = abs(x);
+    if (x < 1.0) {
+        return (16.0 + x * x * (21.0 * x - 36.0)) / 18.0;
+    } else if (x < 2.0) {
+        return (32.0 + x * (-60.0 + x * (36.0 - 7.0 * x))) / 18.0;
+    }
+    return 0.0;
+}
+
+// Sample a pixel with bounds checking
+vec4 sample_pixel(int x, int y) {
+    x = clamp(x, 0, int(push_constants.input_width) - 1);
+    y = clamp(y, 0, int(push_constants.input_height) - 1);
+    
+    uint idx = uint(y) * push_constants.input_width + uint(x);
+    uint pixel = input_image[idx];
+    
+    // Unpack RGBA from uint (assuming RGBA8 format)
+    float r = float((pixel >>  0) & 0xFF) / 255.0;
+    float g = float((pixel >>  8) & 0xFF) / 255.0;
+    float b = float((pixel >> 16) & 0xFF) / 255.0;
+    float a = float((pixel >> 24) & 0xFF) / 255.0;
+    
+    return vec4(r, g, b, a);
+}
+
+// High-quality bicubic interpolation with better coordinate mapping
+vec4 bicubic_interpolate(float fx, float fy) {
+    // Use floor to get integer coordinates
+    int ix = int(floor(fx));
+    int iy = int(floor(fy));
+    
+    // Calculate fractional parts
+    float dx = fx - float(ix);
+    float dy = fy - float(iy);
+    
+    vec4 result = vec4(0.0);
+    
+    // Sample 4x4 neighborhood with Mitchell-Netravali weights (sharper)
+    for (int j = -1; j <= 2; j++) {
+        for (int i = -1; i <= 2; i++) {
+            vec4 pixel = sample_pixel(ix + i, iy + j);
+            float wx = mitchell_weight(float(i) - dx);
+            float wy = mitchell_weight(float(j) - dy);
+            float weight = wx * wy;
+            result += pixel * weight;
+        }
+    }
+    
+    return clamp(result, 0.0, 1.0);
+}
+
+// Lanczos-2 interpolation for maximum sharpness
+vec4 lanczos_interpolate(float fx, float fy) {
+    int ix = int(floor(fx));
+    int iy = int(floor(fy));
+    
+    float dx = fx - float(ix);
+    float dy = fy - float(iy);
+    
+    vec4 result = vec4(0.0);
+    float weight_sum = 0.0;
+    
+    // Lanczos-2 kernel (4x4)
+    for (int j = -1; j <= 2; j++) {
+        for (int i = -1; i <= 2; i++) {
+            float dist_x = float(i) - dx;
+            float dist_y = float(j) - dy;
+            
+            // Lanczos function
+            float wx = (dist_x == 0.0) ? 1.0 : (2.0 * sin(3.14159 * dist_x) * sin(3.14159 * dist_x / 2.0)) / (3.14159 * 3.14159 * dist_x * dist_x);
+            float wy = (dist_y == 0.0) ? 1.0 : (2.0 * sin(3.14159 * dist_y) * sin(3.14159 * dist_y / 2.0)) / (3.14159 * 3.14159 * dist_y * dist_y);
+            
+            if (abs(dist_x) <= 2.0 && abs(dist_y) <= 2.0) {
+                float weight = wx * wy;
+                vec4 pixel = sample_pixel(ix + i, iy + j);
+                result += pixel * weight;
+                weight_sum += weight;
+            }
+        }
+    }
+    
+    if (weight_sum > 0.0) {
+        result /= weight_sum;
+    }
+    
+    return clamp(result, 0.0, 1.0);
+}
+
 void main() {
     uint out_x = gl_GlobalInvocationID.x;
     uint out_y = gl_GlobalInvocationID.y;
@@ -27,16 +129,28 @@ void main() {
         return;
     }
 
-    // Map output coordinates to input coordinates (nearest neighbor)
-    uint in_x = out_x / push_constants.upscale_factor;
-    uint in_y = out_y / push_constants.upscale_factor;
+    // Improved coordinate mapping - center pixel sampling
+    float in_x = (float(out_x) + 0.5) / float(push_constants.upscale_factor) - 0.5;
+    float in_y = (float(out_y) + 0.5) / float(push_constants.upscale_factor) - 0.5;
     
-    // Ensure we don't go out of bounds
-    in_x = min(in_x, push_constants.input_width - 1);
-    in_y = min(in_y, push_constants.input_height - 1);
-
-    uint input_idx = in_y * push_constants.input_width + in_x;
+    // Use Lanczos for maximum sharpness, or bicubic for balanced quality
+    vec4 color;
+    if (push_constants.upscale_factor >= 4) {
+        // Use Lanczos for high upscale factors to maintain sharpness
+        color = lanczos_interpolate(in_x, in_y);
+    } else {
+        // Use Mitchell-Netravali bicubic for lower factors
+        color = bicubic_interpolate(in_x, in_y);
+    }
+    
+    // Pack back to RGBA8
+    uint r = uint(color.r * 255.0 + 0.5);
+    uint g = uint(color.g * 255.0 + 0.5);
+    uint b = uint(color.b * 255.0 + 0.5);
+    uint a = uint(color.a * 255.0 + 0.5);
+    
+    uint packed = (a << 24) | (b << 16) | (g << 8) | r;
+    
     uint output_idx = out_y * output_width + out_x;
-    
-    output_image[output_idx] = input_image[input_idx];
+    output_image[output_idx] = packed;
 }

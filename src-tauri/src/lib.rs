@@ -2,9 +2,10 @@
 
 pub mod vulkan;
 
+use image::GenericImageView;
 use std::env;
 use std::path::Path;
-use tauri::{generate_context, Builder, Manager};
+use tauri::{generate_context, Builder};
 use tauri_plugin_dialog::init as dialog_init;
 use tauri_plugin_fs::init as fs_init;
 use vulkan::VulkanContext;
@@ -133,6 +134,164 @@ fn setup_moltenvk_for_command() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tauri::command]
+fn upscale_image_enhanced(
+    path: String,
+    factor: u32,
+    apply_sharpening: Option<bool>,
+    apply_contrast_enhancement: Option<bool>,
+    apply_noise_reduction: Option<bool>,
+) -> Result<String, String> {
+    println!(
+        "🚀 Starting ENHANCED upscale process for: {} with factor: {}",
+        path, factor
+    );
+
+    // Default values for optional parameters - optimized for sharpness
+    let sharpening = apply_sharpening.unwrap_or(true);
+    let contrast = apply_contrast_enhancement.unwrap_or(true);
+    let noise_reduction = apply_noise_reduction.unwrap_or(false); // Keep false by default to avoid blur
+
+    println!("🎛️  Post-processing settings:");
+    println!("   - Sharpening: {}", sharpening);
+    println!("   - Contrast Enhancement: {}", contrast);
+    println!("   - Noise Reduction: {}", noise_reduction);
+
+    // Validate inputs
+    if !Path::new(&path).exists() {
+        let error_msg = format!("❌ Input file does not exist: {}", path);
+        println!("{}", error_msg);
+        return Err(error_msg);
+    }
+
+    if factor == 0 || factor > 8 {
+        let error_msg = format!(
+            "❌ Invalid upscale factor: {}. Must be between 1 and 8.",
+            factor
+        );
+        println!("{}", error_msg);
+        return Err(error_msg);
+    }
+
+    // Ensure MoltenVK is properly configured for macOS
+    #[cfg(target_os = "macos")]
+    {
+        setup_moltenvk_for_command().map_err(|e| {
+            let error_msg = format!("❌ MoltenVK setup failed: {}", e);
+            println!("{}", error_msg);
+            error_msg
+        })?;
+    }
+
+    println!("📦 Initializing Vulkan context...");
+    let vulkan_context = VulkanContext::new().map_err(|e| {
+        let error_msg = format!("❌ Vulkan initialization failed: {}", e);
+        println!("{}", error_msg);
+        println!("💡 Debug info:");
+        println!("   VK_ICD_FILENAMES = {:?}", env::var("VK_ICD_FILENAMES"));
+        println!("   VK_DRIVER_FILES = {:?}", env::var("VK_DRIVER_FILES"));
+        error_msg
+    })?;
+    println!("✅ Vulkan context initialized successfully");
+
+    let output_path = {
+        let temp_dir = env::temp_dir();
+        let file_name = format!(
+            "upscaled_enhanced_{}x_{}.png",
+            factor,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
+        temp_dir.join(file_name).to_str().unwrap().to_string()
+    };
+
+    println!("🎯 Output path: {}", output_path);
+
+    vulkan::process_image_enhanced(
+        &vulkan_context,
+        &path,
+        &output_path,
+        factor,
+        sharpening,
+        contrast,
+        noise_reduction,
+    )
+    .map_err(|e| {
+        let error_msg = format!("❌ Enhanced image processing failed: {}", e);
+        println!("{}", error_msg);
+        error_msg
+    })?;
+
+    println!("🎉 Enhanced upscaling completed successfully!");
+    Ok(output_path)
+}
+
+#[tauri::command]
+fn upscale_image_nearest_neighbor(path: String, factor: u32) -> Result<String, String> {
+    println!(
+        "🚀 Starting NEAREST NEIGHBOR upscale (pixel-perfect) for: {} with factor: {}",
+        path, factor
+    );
+
+    // Validate inputs
+    if !Path::new(&path).exists() {
+        let error_msg = format!("❌ Input file does not exist: {}", path);
+        println!("{}", error_msg);
+        return Err(error_msg);
+    }
+
+    if factor == 0 || factor > 8 {
+        let error_msg = format!(
+            "❌ Invalid upscale factor: {}. Must be between 1 and 8.",
+            factor
+        );
+        println!("{}", error_msg);
+        return Err(error_msg);
+    }
+
+    // For nearest neighbor, we can use simple image library upscaling
+    let input_image = image::open(&path).map_err(|e| {
+        let error_msg = format!("❌ Failed to open input image: {}", e);
+        println!("{}", error_msg);
+        error_msg
+    })?;
+
+    let (width, height) = input_image.dimensions();
+    let output_width = width * factor;
+    let output_height = height * factor;
+
+    // Use image library's nearest neighbor resize
+    let resized = input_image.resize_exact(
+        output_width,
+        output_height,
+        image::imageops::FilterType::Nearest,
+    );
+
+    let output_path = {
+        let temp_dir = env::temp_dir();
+        let file_name = format!(
+            "upscaled_nearest_{}x_{}.png",
+            factor,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
+        temp_dir.join(file_name).to_str().unwrap().to_string()
+    };
+
+    resized.save(&output_path).map_err(|e| {
+        let error_msg = format!("❌ Failed to save output image: {}", e);
+        println!("{}", error_msg);
+        error_msg
+    })?;
+
+    println!("🎉 Nearest neighbor upscaling completed: {}", output_path);
+    Ok(output_path)
+}
+
+#[tauri::command]
 fn upscale_image(path: String, factor: u32) -> Result<String, String> {
     println!(
         "🚀 Starting upscale process for: {} with factor: {}",
@@ -203,7 +362,7 @@ fn upscale_image(path: String, factor: u32) -> Result<String, String> {
 
 pub fn run() {
     Builder::default()
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(target_os = "macos")]
             {
                 println!("🍎 Running on macOS - MoltenVK will be configured when needed");
@@ -213,7 +372,11 @@ pub fn run() {
         })
         .plugin(fs_init())
         .plugin(dialog_init())
-        .invoke_handler(tauri::generate_handler![upscale_image])
+        .invoke_handler(tauri::generate_handler![
+            upscale_image,
+            upscale_image_enhanced,
+            upscale_image_nearest_neighbor
+        ])
         .run(generate_context!())
         .expect("error while running tauri application");
 }
