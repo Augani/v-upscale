@@ -1,0 +1,42 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(push_constant) uniform PushConstants {
+    uint input_width;
+    uint input_height;
+    uint upscale_factor;
+} push_constants;
+
+layout(binding = 0) readonly buffer Input {
+    uint input_image[];
+};
+
+layout(binding = 1) writeonly buffer Output {
+    uint output_image[];
+};
+
+void main() {
+    uint out_x = gl_GlobalInvocationID.x;
+    uint out_y = gl_GlobalInvocationID.y;
+    
+    uint output_width = push_constants.input_width * push_constants.upscale_factor;
+    uint output_height = push_constants.input_height * push_constants.upscale_factor;
+
+    if (out_x >= output_width || out_y >= output_height) {
+        return;
+    }
+
+    // Map output coordinates to input coordinates (nearest neighbor)
+    uint in_x = out_x / push_constants.upscale_factor;
+    uint in_y = out_y / push_constants.upscale_factor;
+    
+    // Ensure we don't go out of bounds
+    in_x = min(in_x, push_constants.input_width - 1);
+    in_y = min(in_y, push_constants.input_height - 1);
+
+    uint input_idx = in_y * push_constants.input_width + in_x;
+    uint output_idx = out_y * output_width + out_x;
+    
+    output_image[output_idx] = input_image[input_idx];
+}

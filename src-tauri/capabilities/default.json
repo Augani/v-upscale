@@ -1,0 +1,108 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-webview-close",
+    "core:webview:allow-webview-position",
+    "core:webview:allow-webview-size",
+    "core:webview:allow-set-webview-position",
+    "core:webview:allow-set-webview-size",
+    "core:webview:allow-set-webview-focus",
+    "core:webview:allow-set-webview-zoom",
+    "core:window:allow-close",
+    "core:window:allow-center",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-title",
+    "core:window:allow-get-all-windows",
+    "core:window:allow-is-maximized",
+    "core:window:allow-is-minimized",
+    "core:window:allow-is-fullscreen",
+    "core:event:allow-listen",
+    "core:event:allow-emit",
+    "dialog:default",
+    "shell:default",
+    "notification:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$DOWNLOAD"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        },
+        {
+          "path": "$DOCUMENT"
+        },
+        {
+          "path": "$DOCUMENT/**"
+        },
+        {
+          "path": "$DESKTOP"
+        },
+        {
+          "path": "$DESKTOP/**"
+        },
+        {
+          "path": "$HOME"
+        },
+        {
+          "path": "$HOME/**"
+        },
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/**"
+        },
+        {
+          "path": "$TEMP"
+        },
+        {
+          "path": "$TEMP/**"
+        }
+      ]
+    },
+    "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-read-text-file",
+    "fs:allow-write-file",
+    "fs:allow-write-text-file",
+    "fs:allow-create",
+    "fs:allow-copy-file",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-download-write",
+    "fs:allow-download-write-recursive",
+    "fs:allow-document-write",
+    "fs:allow-document-write-recursive",
+    "fs:allow-desktop-write",
+    "fs:allow-desktop-write-recursive",
+    "fs:allow-appdata-write",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-temp-write",
+    "fs:allow-temp-write-recursive",
+    "core:path:default",
+    "core:path:allow-resolve-directory",
+    "core:path:allow-resolve",
+    "core:path:allow-normalize",
+    "core:path:allow-join",
+    "core:path:allow-dirname",
+    "core:path:allow-extname",
+    "core:path:allow-basename",
+    "core:path:allow-is-absolute"
+  ]
+}
