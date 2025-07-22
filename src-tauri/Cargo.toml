@@ -4,7 +4,8 @@ version = "0.1.0"
 description = "A powerful, cross-platform AI image upscaler powered by Vulkan."
 authors = ["you"]
 license = "MIT"
-repository = "https://github.com/your-repo/v-upscale"
+repository = "https://github.com/augani/v-upscale"
+homepage = "https://augani.github.io/v-upscale/"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

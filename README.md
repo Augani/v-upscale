@@ -6,6 +6,7 @@
 [![Build Status](https://github.com/augani/v-upscale/workflows/Build%20V-Upscale/badge.svg)](https://github.com/augani/v-upscale/actions)
 [![Release](https://github.com/augani/v-upscale/workflows/Release/badge.svg)](https://github.com/augani/v-upscale/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Website](https://img.shields.io/badge/Website-Live-blue.svg)](https://augani.github.io/v-upscale/)
 
 V-Upscale is a cross-platform desktop application that uses advanced interpolation algorithms and GPU acceleration to upscale images with exceptional quality. Built with Rust, Tauri, and React for maximum performance and modern UI. I was already using this in a bigger application and decided to make it standalone so brought over some of the code here. hope you enjoy!
 
@@ -62,6 +63,8 @@ V-Upscale is designed to **work immediately** without any setup:
 Perfect for users who want professional image upscaling **without the technical hassle**.
 
 ## 🚀 Quick Start
+
+> **🌐 Visit our website:** [https://augani.github.io/v-upscale/](https://augani.github.io/v-upscale/)
 
 ### Download & Install
 

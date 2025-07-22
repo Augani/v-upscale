@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V-Upscale - Professional AI Image Upscaler</title>
+    <meta name="description" content="Professional-grade AI image upscaler powered by Vulkan compute shaders. Zero dependencies, maximum quality.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="brand-icon">🚀</span>
+                <span class="brand-text">V-Upscale</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#download" class="nav-link">Download</a>
+                <a href="https://github.com/augani/v-upscale" class="nav-link" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    Professional-grade <span class="gradient-text">AI Image Upscaler</span>
+                </h1>
+                <p class="hero-subtitle">
+                    Transform low-resolution images into stunning high-quality masterpieces with advanced interpolation algorithms and GPU acceleration. <strong>Zero dependencies required.</strong>
+                </p>
+                <div class="hero-buttons">
+                    <a href="#download" class="btn btn-primary">
+                        <span>Download Free</span>
+                        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                    </a>
+                    <a href="https://github.com/augani/v-upscale" class="btn btn-secondary" target="_blank">
+                        <span>View on GitHub</span>
+                        <svg class="btn-icon" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-number">2x-8x</span>
+                        <span class="stat-label">Upscale Factors</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">0</span>
+                        <span class="stat-label">Dependencies</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">GPU</span>
+                        <span class="stat-label">Accelerated</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="demo-container">
+                    <div class="demo-before">
+                        <div class="demo-image before"></div>
+                        <span class="demo-label">Before (320×240)</span>
+                    </div>
+                    <div class="demo-arrow">→</div>
+                    <div class="demo-after">
+                        <div class="demo-image after"></div>
+                        <span class="demo-label">After (2560×1920)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="features-container">
+            <h2 class="section-title">Why Choose V-Upscale?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3 class="feature-title">Professional Quality</h3>
+                    <p class="feature-description">Mitchell-Netravali bicubic and Lanczos-2 interpolation eliminate pixelation and blurring common in traditional upscalers.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3 class="feature-title">Lightning Fast</h3>
+                    <p class="feature-description">Vulkan compute shaders leverage your GPU for processing speeds up to 10x faster than CPU-only solutions.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3 class="feature-title">Zero Dependencies</h3>
+                    <p class="feature-description">No Vulkan SDK, no driver updates, no configuration. Just download and run - everything is bundled internally.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3 class="feature-title">Smart Enhancement</h3>
+                    <p class="feature-description">Advanced post-processing with adaptive sharpening, contrast enhancement, and noise reduction for vintage images.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🖥️</div>
+                    <h3 class="feature-title">Cross-Platform</h3>
+                    <p class="feature-description">Native apps for macOS, Windows, and Linux with identical functionality and performance across all platforms.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎚️</div>
+                    <h3 class="feature-title">Modern Interface</h3>
+                    <p class="feature-description">Clean, intuitive React-based UI with real-time previews, drag-and-drop support, and progress tracking.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Performance Section -->
+    <section class="performance">
+        <div class="performance-container">
+            <h2 class="section-title">Performance Benchmarks</h2>
+            <div class="benchmark-grid">
+                <div class="benchmark-card">
+                    <h3>640×480 → 2560×1920</h3>
+                    <div class="benchmark-stat">~2-5 seconds</div>
+                    <div class="benchmark-quality">⭐⭐⭐⭐⭐</div>
+                </div>
+                <div class="benchmark-card">
+                    <h3>1024×768 → 4096×3072</h3>
+                    <div class="benchmark-stat">~8-15 seconds</div>
+                    <div class="benchmark-quality">⭐⭐⭐⭐⭐</div>
+                </div>
+                <div class="benchmark-card">
+                    <h3>320×240 → 2560×1920</h3>
+                    <div class="benchmark-stat">~3-8 seconds</div>
+                    <div class="benchmark-quality">⭐⭐⭐⭐</div>
+                </div>
+            </div>
+            <p class="benchmark-note">*Benchmarks on M1 MacBook Pro with 16GB unified memory</p>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="download-container">
+            <h2 class="section-title">Download V-Upscale</h2>
+            <p class="download-subtitle">Choose your platform and start upscaling in seconds</p>
+            
+            <div class="download-grid">
+                <div class="download-card">
+                    <div class="platform-icon">🍎</div>
+                    <h3>macOS</h3>
+                    <p>macOS 10.15+ with Metal support</p>
+                    <a href="https://github.com/augani/v-upscale/releases/latest" class="download-btn" target="_blank">
+                        Download .dmg
+                    </a>
+                </div>
+                <div class="download-card">
+                    <div class="platform-icon">🪟</div>
+                    <h3>Windows</h3>
+                    <p>Windows 10+ with DirectX 11+ support</p>
+                    <a href="https://github.com/augani/v-upscale/releases/latest" class="download-btn" target="_blank">
+                        Download .msi
+                    </a>
+                </div>
+                <div class="download-card">
+                    <div class="platform-icon">🐧</div>
+                    <h3>Linux</h3>
+                    <p>Any recent distribution with GPU drivers</p>
+                    <a href="https://github.com/augani/v-upscale/releases/latest" class="download-btn" target="_blank">
+                        Download .deb
+                    </a>
+                </div>
+            </div>
+
+            <div class="system-requirements">
+                <h3>System Requirements</h3>
+                <div class="requirements-grid">
+                    <div class="requirement">
+                        <strong>RAM:</strong> 8GB+ recommended
+                    </div>
+                    <div class="requirement">
+                        <strong>Storage:</strong> 100MB free space
+                    </div>
+                    <div class="requirement">
+                        <strong>GPU:</strong> Any Metal/DirectX 11+ compatible
+                    </div>
+                    <div class="requirement">
+                        <strong>Dependencies:</strong> None required!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="brand-icon">🚀</span>
+                    <span class="brand-text">V-Upscale</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/augani/v-upscale" target="_blank">GitHub</a>
+                    <a href="https://github.com/augani/v-upscale/releases" target="_blank">Releases</a>
+                    <a href="https://github.com/augani/v-upscale/issues" target="_blank">Support</a>
+                    <a href="https://github.com/augani/v-upscale/blob/main/LICENSE" target="_blank">License</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 V-Upscale. Released under the MIT License.</p>
+                <p>Built with ❤️ using Rust, Tauri, and React</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html> 
