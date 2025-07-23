@@ -150,75 +150,26 @@ jobs:
           cp /opt/homebrew/lib/libMoltenVK.dylib src-tauri/moltenvk/ 2>/dev/null || echo "Using bundled MoltenVK"
           cp /opt/homebrew/lib/libvulkan.dylib src-tauri/moltenvk/ 2>/dev/null || echo "Using bundled Vulkan loader"
 
-      - name: Install Vulkan SDK (Windows)
+      - name: Install Vulkan Runtime Components (Windows)
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
-          # Use latest stable Vulkan SDK version (released Jan 14, 2025)
-          $version = "1.4.304.0"
-          $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanSDK-$version-Installer.exe"
-          $installer = "$env:TEMP\VulkanSDKInstaller.exe"
+          $version = "1.4.321.0"
+          $zipUrl = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanRT-X64-$version-Components.zip"
+          $zipPath = "$env:RUNNER_TEMP\VulkanRT.zip"
+          $extractPath = "$env:RUNNER_TEMP\VulkanRT"
 
-          Write-Host "Downloading Vulkan SDK $version..."
+          Write-Host "📦 Downloading Vulkan runtime components..."
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath
 
-          # Download with timeout and retry
-          $downloadSuccess = $false
-          $maxRetries = 3
-          for ($i = 1; $i -le $maxRetries; $i++) {
-            try {
-              Write-Host "Download attempt $i/$maxRetries"
-              Invoke-WebRequest -Uri $url -OutFile $installer -TimeoutSec 300
-              $downloadSuccess = $true
-              break
-            } catch {
-              Write-Host "Download attempt $i failed: $_"
-              if ($i -eq $maxRetries) {
-                throw "Failed to download Vulkan SDK after $maxRetries attempts"
-              }
-              Start-Sleep -Seconds 5
-            }
-          }
+          Write-Host "📂 Extracting Vulkan runtime..."
+          Expand-Archive -Path $zipPath -DestinationPath $extractPath
 
-          if (-not $downloadSuccess) {
-            throw "Failed to download Vulkan SDK"
-          }
+          # Set environment variables so the Tauri build can find Vulkan
+          echo "VULKAN_SDK=$extractPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "$extractPath\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
-          Write-Host "Installing Vulkan SDK (this may take a few minutes)..."
-
-          # Install with timeout
-          $process = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru
-          $timeout = 600  # 10 minutes timeout
-
-          if ($process.WaitForExit($timeout * 1000)) {
-            if ($process.ExitCode -eq 0) {
-              Write-Host "Vulkan SDK installation completed successfully"
-            } else {
-              throw "Vulkan SDK installation failed with exit code: $($process.ExitCode)"
-            }
-          } else {
-            $process.Kill()
-            throw "Vulkan SDK installation timed out after $timeout seconds"
-          }
-
-          # Clean up installer
-          Remove-Item $installer -ErrorAction SilentlyContinue
-
-          # Set environment variables
-          $VulkanPath = "C:\VulkanSDK\$version"
-          if (Test-Path $VulkanPath) {
-            echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-            echo "PATH=$VulkanPath\Bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
-            Write-Host "Vulkan SDK installed successfully at: $VulkanPath"
-          } else {
-            # Fallback: find the actual installation directory
-            $VulkanPath = Get-ChildItem -Path "C:\VulkanSDK" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
-            if ($VulkanPath) {
-              echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-              echo "PATH=$VulkanPath\Bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
-              Write-Host "Vulkan SDK found at: $VulkanPath"
-            } else {
-              throw "Vulkan SDK installation directory not found"
-            }
-          }
+          Write-Host "✅ Vulkan runtime installed to: $extractPath"
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
