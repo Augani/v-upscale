@@ -88,6 +88,7 @@ jobs:
   build-release:
     name: Build Release (${{ matrix.target }})
     needs: create-release
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -152,10 +153,72 @@ jobs:
       - name: Install Vulkan SDK (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          choco install vulkan-sdk --yes
-          $VulkanPath = Get-ChildItem -Path "C:\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
-          echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "Vulkan SDK installed at: $VulkanPath"
+          # Use latest stable Vulkan SDK version (released Jan 14, 2025)
+          $version = "1.4.304.0"
+          $url = "https://sdk.lunarg.com/sdk/download/$version/windows/VulkanSDK-$version-Installer.exe"
+          $installer = "$env:TEMP\VulkanSDKInstaller.exe"
+
+          Write-Host "Downloading Vulkan SDK $version..."
+
+          # Download with timeout and retry
+          $downloadSuccess = $false
+          $maxRetries = 3
+          for ($i = 1; $i -le $maxRetries; $i++) {
+            try {
+              Write-Host "Download attempt $i/$maxRetries"
+              Invoke-WebRequest -Uri $url -OutFile $installer -TimeoutSec 300
+              $downloadSuccess = $true
+              break
+            } catch {
+              Write-Host "Download attempt $i failed: $_"
+              if ($i -eq $maxRetries) {
+                throw "Failed to download Vulkan SDK after $maxRetries attempts"
+              }
+              Start-Sleep -Seconds 5
+            }
+          }
+
+          if (-not $downloadSuccess) {
+            throw "Failed to download Vulkan SDK"
+          }
+
+          Write-Host "Installing Vulkan SDK (this may take a few minutes)..."
+
+          # Install with timeout
+          $process = Start-Process -FilePath $installer -ArgumentList "/S" -PassThru
+          $timeout = 600  # 10 minutes timeout
+
+          if ($process.WaitForExit($timeout * 1000)) {
+            if ($process.ExitCode -eq 0) {
+              Write-Host "Vulkan SDK installation completed successfully"
+            } else {
+              throw "Vulkan SDK installation failed with exit code: $($process.ExitCode)"
+            }
+          } else {
+            $process.Kill()
+            throw "Vulkan SDK installation timed out after $timeout seconds"
+          }
+
+          # Clean up installer
+          Remove-Item $installer -ErrorAction SilentlyContinue
+
+          # Set environment variables
+          $VulkanPath = "C:\VulkanSDK\$version"
+          if (Test-Path $VulkanPath) {
+            echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+            echo "PATH=$VulkanPath\Bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Vulkan SDK installed successfully at: $VulkanPath"
+          } else {
+            # Fallback: find the actual installation directory
+            $VulkanPath = Get-ChildItem -Path "C:\VulkanSDK" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1 -ExpandProperty FullName
+            if ($VulkanPath) {
+              echo "VULKAN_SDK=$VulkanPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+              echo "PATH=$VulkanPath\Bin;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+              Write-Host "Vulkan SDK found at: $VulkanPath"
+            } else {
+              throw "Vulkan SDK installation directory not found"
+            }
+          }
 
       - name: Install dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
